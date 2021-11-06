@@ -1,7 +1,6 @@
 #define NTHREADS 2
 
 bool queue[NTHREADS] = { 1, 0 };
-bool crit[NTHREADS] = { 0, 0 };
 byte cnt = 0;
 
 /*
@@ -17,19 +16,20 @@ byte cnt = 0;
 */
 active [NTHREADS] proctype process() {
     byte state = 0;
+    byte crit = 0;
     byte localcnt;
     do
     :: (state == 0) -> atomic {
           localcnt = cnt % NTHREADS;
-          cnt++;
+          cnt = (cnt + 1) % 255;
           state = 1;
     }
-    :: (state == 1) -> (queue[localcnt] == true) -> atomic {
-            crit[_pid] = 1;
+    :: (state == 1) -> queue[localcnt] -> atomic {
+            crit = 1;
             queue[localcnt] = false;
             queue[(localcnt+1) % NTHREADS] = true;
             state = 0;
-            crit[_pid] = 0;
+            crit = 0;
     }
     od
 }
@@ -40,10 +40,10 @@ active [NTHREADS] proctype process() {
 3. starvation-freedom, i.e., a process that tries to enter the critical section will eventually enter (you might need to manually refer to all threads one by one for checking starvation freedom, meaning that your code for checking it might not be parametric with respect to NTHREADS).
 */
 ltl invariant { 
-    [] !(crit[0] && crit[1]) &&        // Mutual exclusion of critical sections
-    [] !(queue[0] && queue[1]) &&      // Mutual exclusion of queue slots
-    [] (queue[0] -> (<> queue[1])) &&  // In-order queueing (0)
-    [] (queue[1] -> (<> queue[0])) &&  // In-order queueing (1)
-    [] (<> queue[0]) &&                // Starvation freedom (0)
-    [] (<> queue[1])                   // Starvation freedom (1)
+    [] !(process[0]:crit && process[1]:crit) && // Mutual exclusion of critical sections
+    [] !(queue[0] && queue[1]) &&               // Mutual exclusion of queue slots
+    [] (queue[0] -> (<> queue[1])) &&           // In-order queueing (0)
+    [] (queue[1] -> (<> queue[0])) &&           // In-order queueing (1)
+    [] (<> queue[0]) &&                         // Starvation freedom (0)
+    [] (<> queue[1])                            // Starvation freedom (1)
 }
